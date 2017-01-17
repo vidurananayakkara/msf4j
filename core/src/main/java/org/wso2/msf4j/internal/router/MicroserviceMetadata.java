@@ -30,12 +30,6 @@ import java.util.List;
 import java.util.NoSuchElementException;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
-import javax.ws.rs.DELETE;
-import javax.ws.rs.GET;
-import javax.ws.rs.HEAD;
-import javax.ws.rs.OPTIONS;
-import javax.ws.rs.POST;
-import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
 import javax.ws.rs.core.Response;
 
@@ -69,7 +63,7 @@ public final class MicroserviceMetadata {
                     continue;
                 }
 
-                if (Modifier.isPublic(method.getModifiers()) && isHttpMethodAvailable(method)) {
+                if (Modifier.isPublic(method.getModifiers()) && Util.isHttpMethodAvailable(method)) {
                     String relativePath = "";
                     if (method.getAnnotation(Path.class) != null) {
                         relativePath = method.getAnnotation(Path.class).value();
@@ -107,7 +101,7 @@ public final class MicroserviceMetadata {
                 continue;
             }
 
-            if (Modifier.isPublic(method.getModifiers()) && isHttpMethodAvailable(method)) {
+            if (Modifier.isPublic(method.getModifiers()) && Util.isHttpMethodAvailable(method)) {
                 String relativePath = "";
                 if (method.getAnnotation(Path.class) != null) {
                     relativePath = method.getAnnotation(Path.class).value();
@@ -120,15 +114,6 @@ public final class MicroserviceMetadata {
             }
         }
 
-    }
-
-    private boolean isHttpMethodAvailable(Method method) {
-        return method.isAnnotationPresent(GET.class) ||
-                method.isAnnotationPresent(PUT.class) ||
-                method.isAnnotationPresent(POST.class) ||
-                method.isAnnotationPresent(DELETE.class) ||
-                method.isAnnotationPresent(HEAD.class) ||
-                method.isAnnotationPresent(OPTIONS.class);
     }
 
     /**
@@ -217,30 +202,28 @@ public final class MicroserviceMetadata {
             HttpResourceModel resourceModel = destination.getDestination();
             int groupMatch = destination.getGroupNameValues().size();
 
-            for (String httpMethod : resourceModel.getHttpMethod()) {
-                if (targetHttpMethod.equals(httpMethod)) {
-                    int exactMatch = getExactPrefixMatchCount(requestUriParts, Collections
-                            .unmodifiableList(Utils.split(resourceModel.getPath(), "/", true)));
+            if (targetHttpMethod.equals(resourceModel.getHttpMethod())) {
+                int exactMatch = getExactPrefixMatchCount(requestUriParts, Collections
+                        .unmodifiableList(Utils.split(resourceModel.getPath(), "/", true)));
 
-                    // When there are multiple matches present, the following precedence order is used -
-                    // 1. template path that has highest exact prefix match with the url is chosen.
-                    // 2. template path has the maximum groups is chosen.
-                    // 3. finally, template path that has the longest length is chosen.
-                    if (exactMatch > maxExactMatch) {
-                        maxExactMatch = exactMatch;
+                // When there are multiple matches present, the following precedence order is used -
+                // 1. template path that has highest exact prefix match with the url is chosen.
+                // 2. template path has the maximum groups is chosen.
+                // 3. finally, template path that has the longest length is chosen.
+                if (exactMatch > maxExactMatch) {
+                    maxExactMatch = exactMatch;
+                    maxGroupMatch = groupMatch;
+                    maxPatternLength = resourceModel.getPath().length();
+
+                    matchedDestinations.clear();
+                    matchedDestinations.add(destination);
+                } else if (exactMatch == maxExactMatch && groupMatch >= maxGroupMatch) {
+                    if (groupMatch > maxGroupMatch || resourceModel.getPath().length() > maxPatternLength) {
                         maxGroupMatch = groupMatch;
                         maxPatternLength = resourceModel.getPath().length();
-
                         matchedDestinations.clear();
-                        matchedDestinations.add(destination);
-                    } else if (exactMatch == maxExactMatch && groupMatch >= maxGroupMatch) {
-                        if (groupMatch > maxGroupMatch || resourceModel.getPath().length() > maxPatternLength) {
-                            maxGroupMatch = groupMatch;
-                            maxPatternLength = resourceModel.getPath().length();
-                            matchedDestinations.clear();
-                        }
-                        matchedDestinations.add(destination);
                     }
+                    matchedDestinations.add(destination);
                 }
             }
         }
