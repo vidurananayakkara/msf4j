@@ -132,7 +132,6 @@
         <module>samples/petstore</module>
         <module>samples/fileserver</module>
         <module>samples/template</module>
-        <module>samples/log-interceptor-bundle</module>
         <module>samples/lifecycle</module>
         <module>samples/jwt-claims</module>
         <module>samples/spring-helloworld</module>
@@ -142,9 +141,10 @@
         <module>samples/message-tracing</module>
         <module>samples/subresource</module>
         <module>samples/spring-profile</module>
-        <module>samples/rest-interceptor/common</module>
-        <module>samples/rest-interceptor/bundle</module>
-        <module>samples/rest-interceptor/fatjar</module>
+        <module>samples/interceptor/interceptor-common</module>
+        <module>samples/interceptor/fatjar-interceptor-service</module>
+        <module>samples/interceptor/deployable-jar-interceptor-service</module>
+        <module>samples/interceptor/osgi-interceptor-service</module>
 
         <module>perf-benchmark/Samples/wso2msf4j</module>
         <module>features/feature-test</module>
