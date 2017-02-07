@@ -21,6 +21,8 @@ import org.wso2.msf4j.DefaultSessionManager;
 import org.wso2.msf4j.MicroservicesRegistry;
 import org.wso2.msf4j.SessionManager;
 import org.wso2.msf4j.SwaggerService;
+import org.wso2.msf4j.context.ContextProvider;
+import org.wso2.msf4j.context.EmptyContextProvider;
 import org.wso2.msf4j.interceptor.MSF4JRequestInterceptor;
 import org.wso2.msf4j.interceptor.MSF4JResponseInterceptor;
 import org.wso2.msf4j.internal.router.MicroserviceMetadata;
@@ -62,6 +64,7 @@ public class MicroservicesRegistryImpl implements MicroservicesRegistry {
     private volatile MicroserviceMetadata metadata = new MicroserviceMetadata(Collections.emptyList());
     private Map<Class, ExceptionMapper> exceptionMappers = new TreeMap<>(new ClassComparator());
     private SessionManager sessionManager = new DefaultSessionManager();
+    private Map<String, ContextProvider<?>> contextProviderMap = new HashMap<>();
 
     public MicroservicesRegistryImpl() {
         /* In non OSGi mode, if we can find the SwaggerDefinitionService, Deploy the Swagger definition service which
@@ -154,7 +157,7 @@ public class MicroservicesRegistryImpl implements MicroservicesRegistry {
     /**
      * Remove msf4j request interceptor.
      *
-     * @param isGlobal                is a global interceptor?
+     * @param isGlobal           is a global interceptor?
      * @param requestInterceptor MSF4J interceptor instance.
      */
     public void removeRequestInterceptor(boolean isGlobal, MSF4JRequestInterceptor requestInterceptor) {
@@ -167,7 +170,7 @@ public class MicroservicesRegistryImpl implements MicroservicesRegistry {
     /**
      * Remove msf4j response interceptor.
      *
-     * @param isGlobal                 is a global interceptor?
+     * @param isGlobal            is a global interceptor?
      * @param responseInterceptor MSF4J interceptor instance.
      */
     public void removeResponseInterceptor(boolean isGlobal, MSF4JResponseInterceptor responseInterceptor) {
@@ -211,6 +214,46 @@ public class MicroservicesRegistryImpl implements MicroservicesRegistry {
      */
     public List<MSF4JResponseInterceptor> getGlobalResponseInterceptorList() {
         return globalResponseInterceptorList;
+    }
+
+    /**
+     * Get context provider by name.
+     *
+     * @param contextName name of the context provider
+     * @return ContextProvider of the given type
+     */
+    public ContextProvider getContextProviderByName(String contextName) {
+        return contextProviderMap.getOrDefault(contextName, new EmptyContextProvider());
+    }
+
+    /**
+     * Add a context providers.
+     *
+     * @param contextProviders context provider instances
+     */
+    public void addContextProviders(ContextProvider<?>... contextProviders) {
+
+        for (ContextProvider<?> contextProvider : contextProviders) {
+            if (!contextProviderMap.containsKey(contextProvider.getContextName())) {
+                contextProviderMap.put(contextProvider.getContextName(), contextProvider);
+            } else {
+                // Override value
+                log.warn("Context provider with the same name {} found - overriding value",
+                        contextProvider.getContextName());
+                contextProviderMap.replace(contextProvider.getContextName(), contextProvider);
+            }
+        }
+    }
+
+    /**
+     * Remove context provider.
+     *
+     * @param contextProvider context provider to be removed
+     * @param params          parameters
+     */
+    public void removeContextProvider(ContextProvider<?> contextProvider, Object... params) {
+        contextProviderMap.remove(contextProvider.getContextName());
+        contextProvider.onRemoveContextProvider(params);
     }
 
     public void addExceptionMapper(ExceptionMapper... mapper) {

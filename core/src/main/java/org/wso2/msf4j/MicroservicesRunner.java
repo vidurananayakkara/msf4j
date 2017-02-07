@@ -26,6 +26,7 @@ import org.wso2.carbon.transport.http.netty.config.TransportsConfiguration;
 import org.wso2.carbon.transport.http.netty.config.YAMLTransportConfigurationBuilder;
 import org.wso2.carbon.transport.http.netty.internal.HTTPTransportContextHolder;
 import org.wso2.carbon.transport.http.netty.listener.HTTPTransportListener;
+import org.wso2.msf4j.context.ContextProvider;
 import org.wso2.msf4j.interceptor.MSF4JRequestInterceptor;
 import org.wso2.msf4j.interceptor.MSF4JResponseInterceptor;
 import org.wso2.msf4j.internal.DataHolder;
@@ -91,7 +92,7 @@ public class MicroservicesRunner {
      * Deploy a microservice with dynamic path.
      *
      * @param microservice The microservice which is to be deployed
-     * @param basePath The context path for the service
+     * @param basePath     The context path for the service
      * @return this MicroservicesRunner object
      */
     public MicroservicesRunner deploy(String basePath, Object microservice) {
@@ -169,6 +170,18 @@ public class MicroservicesRunner {
         checkState();
         msRegistry.registerRequestInterceptor(true, interceptor);
         msRegistry.registerResponseInterceptor(true, interceptor);
+        return this;
+    }
+
+    /**
+     * Add context providers.
+     *
+     * @param contextProviders context provider instances
+     * @return this MicroservicesRunner object
+     */
+    public MicroservicesRunner addContextProviders(ContextProvider<?>... contextProviders) {
+        checkState();
+        msRegistry.addContextProviders(contextProviders);
         return this;
     }
 

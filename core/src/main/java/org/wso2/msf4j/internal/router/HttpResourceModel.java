@@ -17,10 +17,12 @@
 package org.wso2.msf4j.internal.router;
 
 import org.wso2.msf4j.HttpStreamer;
+import org.wso2.msf4j.context.annotation.MSF4JContext;
 import org.wso2.msf4j.formparam.FormDataParam;
 import org.wso2.msf4j.util.Utils;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
@@ -57,19 +59,38 @@ import javax.ws.rs.core.Context;
 public final class HttpResourceModel {
 
     private static final Set<Class<? extends Annotation>> SUPPORTED_PARAM_ANNOTATIONS;
+    private static final Set<Class<? extends Annotation>> SUPPORTED_METHOD_ANNOTATIONS;
+    private static final Set<Class<? extends Annotation>> SUPPORTED_FIELD_ANNOTATIONS;
 
+    // Supported parameter annotations
     static {
-        Set<Class<? extends Annotation>> supportedAnnotation =
-                new HashSet<>();
-        supportedAnnotation.add(PathParam.class);
-        supportedAnnotation.add(QueryParam.class);
-        supportedAnnotation.add(HeaderParam.class);
-        supportedAnnotation.add(Context.class);
-        supportedAnnotation.add(FormParam.class);
-        supportedAnnotation.add(FormDataParam.class);
-        supportedAnnotation.add(CookieParam.class);
+        Set<Class<? extends Annotation>> supportedParameterAnnotations = new HashSet<>();
+        supportedParameterAnnotations.add(PathParam.class);
+        supportedParameterAnnotations.add(QueryParam.class);
+        supportedParameterAnnotations.add(HeaderParam.class);
+        supportedParameterAnnotations.add(Context.class);
+        supportedParameterAnnotations.add(FormParam.class);
+        supportedParameterAnnotations.add(FormDataParam.class);
+        supportedParameterAnnotations.add(CookieParam.class);
+        supportedParameterAnnotations.add(MSF4JContext.class);
 
-        SUPPORTED_PARAM_ANNOTATIONS = Collections.unmodifiableSet(supportedAnnotation);
+        SUPPORTED_PARAM_ANNOTATIONS = Collections.unmodifiableSet(supportedParameterAnnotations);
+    }
+
+    // Supported method annotations
+    static {
+        Set<Class<? extends Annotation>> supportedMethodAnnotations = new HashSet<>();
+        supportedMethodAnnotations.add(MSF4JContext.class);
+
+        SUPPORTED_METHOD_ANNOTATIONS = Collections.unmodifiableSet(supportedMethodAnnotations);
+    }
+
+    // Supported field annotations
+    static {
+        Set<Class<? extends Annotation>> supportedFieldAnnotations = new HashSet<>();
+        supportedFieldAnnotations.add(MSF4JContext.class);
+
+        SUPPORTED_FIELD_ANNOTATIONS = Collections.unmodifiableSet(supportedFieldAnnotations);
     }
 
     private static final String[] ANY_MEDIA_TYPE = new String[]{"*/*"};
@@ -378,6 +399,34 @@ public final class HttpResourceModel {
         }
     }
 
+    /**
+     * Get a list of field meta data for a specific class.
+     *
+     * @param clazz class to find the annotations
+     * @return {@link FieldInfo} array
+     */
+    public FieldInfo[] getFieldInfoToClass(Class<?> clazz) {
+        return Arrays.stream(clazz.getDeclaredFields())
+                .map(field -> new FieldInfo(SUPPORTED_FIELD_ANNOTATIONS.stream()
+                        .filter(field::isAnnotationPresent)
+                        .map(field::getAnnotation)
+                        .toArray(Annotation[]::new), field))
+                .toArray(FieldInfo[]::new);
+    }
+
+    /**
+     * Get a list of annotation objects used in a method.
+     *
+     * @param method Method to check for annotations
+     * @return list of annotations
+     */
+    public Annotation[] getAnnotationsToMethod(Method method) {
+        return SUPPORTED_METHOD_ANNOTATIONS.stream()
+                .filter(method::isAnnotationPresent)
+                .map(method::getAnnotation)
+                .toArray(Annotation[]::new);
+    }
+
     public List<ParameterInfo<?>> getParamInfoList() {
         return paramInfoList;
     }
@@ -388,6 +437,38 @@ public final class HttpResourceModel {
 
     public List<String> getProducesMediaTypes() {
         return producesMediaTypes;
+    }
+
+    /**
+     * A container class to hold information about a field in a class.
+     */
+    public static final class FieldInfo {
+
+        private final Annotation[] annotations;
+        private final Field field;
+
+        FieldInfo(Annotation[] annotations, Field field) {
+            this.annotations = annotations;
+            this.field = field;
+        }
+
+        /**
+         * Get annotations to field.
+         *
+         * @return Annotation array set to the field
+         */
+        public Annotation[] getAnnotations() {
+            return Arrays.copyOf(annotations, annotations.length);
+        }
+
+        /**
+         * Get field instance.
+         *
+         * @return field
+         */
+        public Field getField() {
+            return field;
+        }
     }
 
     /**
@@ -415,7 +496,7 @@ public final class HttpResourceModel {
         }
 
         @SuppressWarnings("unchecked")
-        <V extends Annotation> V getAnnotation() {
+        public <V extends Annotation> V getAnnotation() {
             return (V) annotation;
         }
 
@@ -427,7 +508,7 @@ public final class HttpResourceModel {
             return defaultVal;
         }
 
-        Object convert(T input) {
+        public Object convert(T input) {
             return (converter == null) ? null : converter.apply(input);
         }
 

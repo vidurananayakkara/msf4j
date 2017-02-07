@@ -56,7 +56,7 @@ public class HttpMethodInfo {
 
     private final Method method;
     private final Object handler;
-    private final Object[] args;
+    private Object[] args;
     private MultivaluedMap<String, Object> formParameters = null;
     private Response responder;
     private HttpStreamHandler httpStreamHandler;
@@ -346,7 +346,7 @@ public class HttpMethodInfo {
             responder.setMediaType(
                     Util.getResponseType(request.getAcceptTypes(), resourceModel.getProducesMediaTypes()));
             HttpMethodInfo httpMethodInfo = httpSubResourceModelProcessor
-                    .buildHttpMethodInfo(request, responder, groupNameValues);
+                    .buildHttpMethodInfo(request, responder, groupNameValues, microservicesRegistry);
 
             PatternPathRouter.RoutableDestination<HttpResourceModel> newDestination =
                     new PatternPathRouter.RoutableDestination<>(resourceModel, groupNameValues);

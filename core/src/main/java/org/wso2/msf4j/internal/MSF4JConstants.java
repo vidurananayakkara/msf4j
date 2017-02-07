@@ -15,6 +15,8 @@
  */
 package org.wso2.msf4j.internal;
 
+import org.wso2.msf4j.context.EmptyContextProvider;
+
 /**
  * MSF4J Constants.
  */
@@ -25,4 +27,9 @@ public class MSF4JConstants {
 
     // Property constants
     public static final String METHOD_PROPERTY_NAME = "method";
+    public static final String EMPTY_CONTEXT_STRING = EmptyContextProvider.class.getSimpleName();
+    public static final String CONTEXT_SEPARATOR = "@";
+
+    private MSF4JConstants() {
+    }
 }

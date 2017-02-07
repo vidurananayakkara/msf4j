@@ -22,12 +22,17 @@ import org.wso2.msf4j.HttpStreamer;
 import org.wso2.msf4j.Request;
 import org.wso2.msf4j.Response;
 import org.wso2.msf4j.beanconversion.MediaTypeConverter;
+import org.wso2.msf4j.context.ContextProvider;
+import org.wso2.msf4j.context.HttpMethodContext;
+import org.wso2.msf4j.context.annotation.MSF4JContext;
 import org.wso2.msf4j.formparam.FileInfo;
 import org.wso2.msf4j.formparam.FormDataParam;
 import org.wso2.msf4j.formparam.FormItem;
 import org.wso2.msf4j.formparam.FormParamIterator;
 import org.wso2.msf4j.formparam.exception.FormUploadException;
 import org.wso2.msf4j.formparam.util.StreamUtil;
+import org.wso2.msf4j.internal.MSF4JConstants;
+import org.wso2.msf4j.internal.MicroservicesRegistryImpl;
 import org.wso2.msf4j.internal.beanconversion.BeanConverter;
 import org.wso2.msf4j.util.BufferUtil;
 import org.wso2.msf4j.util.QueryStringDecoderUtil;
@@ -38,6 +43,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.nio.ByteBuffer;
@@ -88,71 +96,141 @@ public class HttpResourceModelProcessor {
      * @param request     HttpRequest to be handled.
      * @param responder   HttpResponder to write the response.
      * @param groupValues Values needed for the invocation.
+     * @param registry    Micro-services registry
      * @return HttpMethodInfo
      * @throws HandlerException If an error occurs
      */
-    @SuppressWarnings("unchecked")
-    public HttpMethodInfo buildHttpMethodInfo(Request request,
-                                              Response responder,
-                                              Map<String, String> groupValues)
-            throws HandlerException {
+    public HttpMethodInfo buildHttpMethodInfo(Request request, Response responder, Map<String, String> groupValues,
+                                              MicroservicesRegistryImpl registry) throws HandlerException {
         try {
-            //Setup args for reflection call
-            List<HttpResourceModel.ParameterInfo<?>> paramInfoList = httpResourceModel.getParamInfoList();
-            Object[] args = new Object[paramInfoList.size()];
-            int idx = 0;
-            for (HttpResourceModel.ParameterInfo<?> paramInfo : paramInfoList) {
-                if (paramInfo.getAnnotation() != null) {
-                    Class<? extends Annotation> annotationType = paramInfo.getAnnotation().annotationType();
-                    if (PathParam.class.isAssignableFrom(annotationType)) {
-                        args[idx] = getPathParamValue((HttpResourceModel.ParameterInfo<String>) paramInfo,
-                                groupValues);
-                    } else if (QueryParam.class.isAssignableFrom(annotationType)) {
-                        args[idx] = getQueryParamValue((HttpResourceModel.ParameterInfo<List<String>>) paramInfo,
-                                request.getUri());
-                    } else if (HeaderParam.class.isAssignableFrom(annotationType)) {
-                        args[idx] = getHeaderParamValue((HttpResourceModel.ParameterInfo<List<String>>) paramInfo,
-                                request);
-                    } else if (CookieParam.class.isAssignableFrom(annotationType)) {
-                        args[idx] = getCookieParamValue((HttpResourceModel.ParameterInfo<String>) paramInfo,
-                                request);
-                    } else if (Context.class.isAssignableFrom(annotationType)) {
-                        args[idx] = getContextParamValue((HttpResourceModel.ParameterInfo<Object>) paramInfo,
-                                request, responder);
-                    } else if (FormParam.class.isAssignableFrom(annotationType)) {
-                        args[idx] = getFormParamValue((HttpResourceModel.ParameterInfo<List<Object>>) paramInfo,
-                                request);
-                    } else if (FormDataParam.class.isAssignableFrom(annotationType)) {
-                        args[idx] = getFormDataParamValue((HttpResourceModel.ParameterInfo<List<Object>>) paramInfo,
-                                request);
-                    } else {
-                        createObject(request, args, idx, paramInfo);
-                    }
-                } else {
-                    // If an annotation is not present the parameter is considered a
-                    // request body data parameter
-                    createObject(request, args, idx, paramInfo);
-                }
-                idx++;
-            }
+            Method method = httpResourceModel.getMethod();
 
-            if (httpStreamer == null) {
-                return new HttpMethodInfo(httpResourceModel.getMethod(),
-                        httpResourceModel.getHttpHandler(),
-                        args, formParameters,
-                        responder);
-            } else {
-                return new HttpMethodInfo(httpResourceModel.getMethod(),
-                        httpResourceModel.getHttpHandler(),
-                        args, formParameters,
-                        responder,
-                        httpStreamer);
-            }
-        } catch (Throwable e) {
+            // Class field annotation execution
+            Class<?> clazz = method.getDeclaringClass();
+            executeFieldAnnotations(clazz, method, request, responder, httpResourceModel.getHttpHandler(), registry);
+
+            // Method parameter annotation execution
+            Object[] args = setupMethodArgs(request, responder, groupValues, registry);
+
+            // Method annotation execution
+            Annotation[] annotations = httpResourceModel.getAnnotationsToMethod(method);
+            args = executeMethodAnnotations(annotations, request, responder, method, args, registry);
+            return httpStreamer == null
+                    ? new HttpMethodInfo(httpResourceModel.getMethod(), httpResourceModel.getHttpHandler(), args,
+                    formParameters, responder)
+                    : new HttpMethodInfo(httpResourceModel.getMethod(), httpResourceModel.getHttpHandler(), args,
+                    formParameters, responder, httpStreamer);
+        } catch (IllegalAccessException | IOException e) {
             throw new HandlerException(javax.ws.rs.core.Response.Status.INTERNAL_SERVER_ERROR,
                     String.format("Error in executing request: %s %s", request.getHttpMethod(),
                             request.getUri()), e);
         }
+    }
+
+    /**
+     * Execute annotations applied to field.
+     *
+     * @param clazz    class of the resource invoked
+     * @param method   resource method
+     * @param request  MSF4J request
+     * @param response MSF4J response
+     * @param handler  handler
+     * @param registry Micro-services registry
+     * @throws IllegalAccessException on any exception
+     */
+    private void executeFieldAnnotations(Class<?> clazz, Method method, Request request, Response response,
+                                         Object handler, MicroservicesRegistryImpl registry)
+            throws IllegalAccessException {
+        HttpResourceModel.FieldInfo[] fieldInfos = httpResourceModel.getFieldInfoToClass(clazz);
+        for (HttpResourceModel.FieldInfo fieldInfo : fieldInfos) {
+            if (fieldInfo.getAnnotations().length == 0) {
+                continue;
+            }
+            Field field = fieldInfo.getField();
+            field.setAccessible(true);
+            for (Annotation annotation : fieldInfo.getAnnotations()) {
+                if (MSF4JContext.class.isAssignableFrom(annotation.annotationType())) {
+                    injectValueToField(method, field, request, response, handler, registry);
+                }
+            }
+        }
+    }
+
+    /**
+     * Execute annotations applied to the method.
+     *
+     * @param annotations Annotations applied to the method
+     * @param request     MSF4J request
+     * @param responder   MSF4J response
+     * @param method      method
+     * @param registry    Micro-services registry
+     * @return Argument list to be passed to the method. This is only returned to satisfy certain annotations
+     */
+    private Object[] executeMethodAnnotations(Annotation[] annotations, Request request, Response responder,
+                                              Method method, Object[] args, MicroservicesRegistryImpl registry) {
+        // If arguments are to be modified by method annotations
+        Object[] modifiedArguments = args;
+        for (Annotation annotation : annotations) {
+            if (MSF4JContext.class.isAssignableFrom(annotation.annotationType())) {
+                modifiedArguments = getMSF4JContextParameterValues(request, responder, method, args, registry);
+            }
+        }
+        return modifiedArguments;
+    }
+
+    /**
+     * Setup args for reflection call.
+     *
+     * @param request     HttpRequest to be handled.
+     * @param responder   HttpResponder to write the response.
+     * @param groupValues Values needed for the invocation.
+     * @param registry    Micro-services registry
+     * @throws IOException on injecting parameter values
+     */
+    @SuppressWarnings("unchecked")
+    private Object[] setupMethodArgs(Request request, Response responder, Map<String, String> groupValues,
+                                     MicroservicesRegistryImpl registry) throws IOException {
+
+        List<HttpResourceModel.ParameterInfo<?>> paramInfoList = httpResourceModel.getParamInfoList();
+        Object[] args = new Object[paramInfoList.size()];
+        int idx = 0;
+        for (HttpResourceModel.ParameterInfo<?> paramInfo : paramInfoList) {
+            if (paramInfo.getAnnotation() != null) {
+                Class<? extends Annotation> annotationType = paramInfo.getAnnotation().annotationType();
+                if (PathParam.class.isAssignableFrom(annotationType)) {
+                    args[idx] = getPathParamValue((HttpResourceModel.ParameterInfo<String>) paramInfo,
+                            groupValues);
+                } else if (QueryParam.class.isAssignableFrom(annotationType)) {
+                    args[idx] = getQueryParamValue((HttpResourceModel.ParameterInfo<List<String>>) paramInfo,
+                            request.getUri());
+                } else if (HeaderParam.class.isAssignableFrom(annotationType)) {
+                    args[idx] = getHeaderParamValue((HttpResourceModel.ParameterInfo<List<String>>) paramInfo,
+                            request);
+                } else if (CookieParam.class.isAssignableFrom(annotationType)) {
+                    args[idx] = getCookieParamValue((HttpResourceModel.ParameterInfo<String>) paramInfo,
+                            request);
+                } else if (Context.class.isAssignableFrom(annotationType)) {
+                    args[idx] = getContextParamValue((HttpResourceModel.ParameterInfo<Object>) paramInfo,
+                            request, responder);
+                } else if (MSF4JContext.class.isAssignableFrom(annotationType)) {
+                    args[idx] = getMSF4JContextParameterValue(paramInfo, request, responder,
+                            httpResourceModel.getMethod(), registry);
+                } else if (FormParam.class.isAssignableFrom(annotationType)) {
+                    args[idx] = getFormParamValue((HttpResourceModel.ParameterInfo<List<Object>>) paramInfo,
+                            request);
+                } else if (FormDataParam.class.isAssignableFrom(annotationType)) {
+                    args[idx] = getFormDataParamValue((HttpResourceModel.ParameterInfo<List<Object>>) paramInfo,
+                            request);
+                } else {
+                    createObject(request, args, idx, paramInfo);
+                }
+            } else {
+                // If an annotation is not present the parameter is considered a request body data parameter
+                createObject(request, args, idx, paramInfo);
+            }
+            idx++;
+        }
+        return args;
     }
 
     private void createObject(Request request, Object[] args, int idx, HttpResourceModel.ParameterInfo<?> paramInfo) {
@@ -161,6 +239,94 @@ public class HttpResourceModelProcessor {
         args[idx] =
                 BeanConverter.getConverter((request.getContentType() != null) ? request.getContentType() :
                         MediaType.WILDCARD).convertToObject(fullContent, paramType);
+    }
+
+    /**
+     * Inject value to the field from MSF4JContext.
+     *
+     * @param method                method
+     * @param field                 field
+     * @param request               MSF4J request
+     * @param response              MSF4J response
+     * @param handler               handler
+     * @param microservicesRegistry Micro-services registry
+     * @throws IllegalAccessException when setting the value to the field
+     */
+    private void injectValueToField(Method method, Field field, Request request, Response response, Object handler,
+                                    MicroservicesRegistryImpl microservicesRegistry) throws IllegalAccessException {
+        HttpMethodContext httpMethodContext = new HttpMethodContext(method, handler, request, response);
+        Class<?> fieldType = field.getType();
+        String fieldTypeString = fieldType.getName();
+        MSF4JContext msf4JContext = field.getAnnotation(MSF4JContext.class);
+        String contextName = msf4JContext.value().isEmpty()
+                ? fieldTypeString + MSF4JConstants.CONTEXT_SEPARATOR + fieldTypeString
+                : fieldTypeString + MSF4JConstants.CONTEXT_SEPARATOR + msf4JContext.value();
+        ContextProvider contextProvider = microservicesRegistry.getContextProviderByName(contextName);
+        field.set(handler, contextProvider.createContext(httpMethodContext));
+    }
+
+    /**
+     * Inject value to parameters from a custom context provider.
+     *
+     * @param parameterInfo parameter meta data
+     * @param request       MSF4J request
+     * @param response      MSF4J response
+     * @param method        method
+     * @param registry      micro-services registry
+     * @return value to be injected to the parameter
+     */
+    private Object getMSF4JContextParameterValue(HttpResourceModel.ParameterInfo<?> parameterInfo, Request request,
+                                                 Response response, Method method, MicroservicesRegistryImpl registry) {
+        String parameterTypeName = parameterInfo.getParameterType().getTypeName();
+        MSF4JContext msf4JContext = parameterInfo.getAnnotation();
+        return getMSF4JContextValue(request, response, msf4JContext, parameterTypeName, method, registry);
+    }
+
+    /**
+     * Get injected arguments {@link MSF4JContext method annotation}
+     *
+     * @param request               MSF4J request
+     * @param response              MSF4J response
+     * @param method                method
+     * @param args                  arguments to be passed to the method
+     * @param microServicesRegistry micro-services registry
+     * @return injected argument list
+     */
+    private Object[] getMSF4JContextParameterValues(Request request, Response response, Method method, Object[] args,
+                                                    MicroservicesRegistryImpl microServicesRegistry) {
+        Parameter[] parameters = method.getParameters();
+        if (method.isAnnotationPresent(MSF4JContext.class)) {
+            MSF4JContext msf4JContext = method.getAnnotation(MSF4JContext.class);
+            int index = 0;
+            for (Parameter parameter : parameters) {
+                String parameterTypeName = parameter.getType().getName();
+                args[index++] = getMSF4JContextValue(request, response, msf4JContext, parameterTypeName, method,
+                        microServicesRegistry);
+            }
+        }
+        return args;
+    }
+
+    /**
+     * Inject value to parameters from a custom context provider.
+     *
+     * @param request           MSF4J request
+     * @param response          MSF4J response
+     * @param msf4JContext      MSF4J context annotation
+     * @param parameterTypeName name of the type of the parameter
+     * @param method            method
+     * @param registry          micro-services registry
+     * @return value to be injected to the parameter
+     */
+    private Object getMSF4JContextValue(Request request, Response response, MSF4JContext msf4JContext,
+                                        String parameterTypeName, Method method, MicroservicesRegistryImpl registry) {
+        Object handler = httpResourceModel.getHttpHandler();
+        HttpMethodContext httpMethodContext = new HttpMethodContext(method, handler, request, response);
+        String contextName = msf4JContext.value().isEmpty()
+                ? parameterTypeName + MSF4JConstants.CONTEXT_SEPARATOR + parameterTypeName
+                : parameterTypeName + MSF4JConstants.CONTEXT_SEPARATOR + msf4JContext.value();
+        ContextProvider contextProvider = registry.getContextProviderByName(contextName);
+        return contextProvider.createContext(httpMethodContext);
     }
 
     private Object getFormDataParamValue(HttpResourceModel.ParameterInfo<List<Object>> paramInfo, Request request)

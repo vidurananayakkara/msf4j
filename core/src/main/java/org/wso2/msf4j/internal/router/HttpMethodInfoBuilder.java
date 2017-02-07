@@ -18,6 +18,7 @@ package org.wso2.msf4j.internal.router;
 
 import org.wso2.msf4j.Request;
 import org.wso2.msf4j.Response;
+import org.wso2.msf4j.internal.MicroservicesRegistryImpl;
 
 import java.util.Map;
 
@@ -33,6 +34,7 @@ public class HttpMethodInfoBuilder {
     private Response responder;
     private Map<String, String> groupValues;
     private HttpMethodInfo httpMethodInfo;
+    private MicroservicesRegistryImpl registry;
 
     /**
      * Set the associated HttpResourceModel object.
@@ -80,6 +82,17 @@ public class HttpMethodInfoBuilder {
     }
 
     /**
+     * Set the information of the micro-services registry.
+     *
+     * @param registry Micro-services registry instance
+     * @return HttpMethodInfo object
+     */
+    public HttpMethodInfoBuilder registry(MicroservicesRegistryImpl registry) {
+        this.registry = registry;
+        return this;
+    }
+
+    /**
      * Build HttpMethodInfo instance.
      *
      * @return HttpMethodInfo object
@@ -88,7 +101,7 @@ public class HttpMethodInfoBuilder {
     public HttpMethodInfo build() throws HandlerException {
         if (httpMethodInfo == null) {
             httpMethodInfo = (new HttpResourceModelProcessor(httpResourceModel))
-                    .buildHttpMethodInfo(request, responder, groupValues);
+                    .buildHttpMethodInfo(request, responder, groupValues, registry);
         }
         return httpMethodInfo;
     }
