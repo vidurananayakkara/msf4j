@@ -28,11 +28,7 @@ import org.wso2.carbon.transport.http.netty.config.ListenerConfiguration;
 import org.wso2.carbon.transport.http.netty.config.Parameter;
 import org.wso2.carbon.transport.http.netty.internal.HTTPTransportContextHolder;
 import org.wso2.carbon.transport.http.netty.listener.HTTPTransportListener;
-import org.wso2.msf4j.Interceptor;
-import org.wso2.carbon.transport.http.netty.internal.HTTPTransportContextHolder;
-import org.wso2.carbon.transport.http.netty.listener.HTTPTransportListener;
 import org.wso2.msf4j.MicroservicesRunner;
-import org.wso2.msf4j.internal.DataHolder;
 import org.wso2.msf4j.interceptor.RequestInterceptor;
 import org.wso2.msf4j.interceptor.ResponseInterceptor;
 import org.wso2.msf4j.internal.DataHolder;
@@ -152,8 +148,8 @@ public class SpringMicroservicesRunner extends MicroservicesRunner implements Ap
     private HTTPTransportListener createListenerConfiguration(TransportConfig transportConfig) {
 
         ListenerConfiguration listenerConfig = new ListenerConfiguration(transportConfig.getId(),
-                                                                         transportConfig.getHost(),
-                                                                         transportConfig.getPort());
+                transportConfig.getHost(),
+                transportConfig.getPort());
         listenerConfig.setScheme(transportConfig.getScheme());
         List<Parameter> parameters = new ArrayList<>();
         for (Map.Entry<String, String> entry : transportConfig.getParameters().entrySet()) {

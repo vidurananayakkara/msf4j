@@ -29,9 +29,6 @@ import org.wso2.carbon.transport.http.netty.listener.HTTPTransportListener;
 import org.wso2.msf4j.interceptor.RequestInterceptor;
 import org.wso2.msf4j.interceptor.ResponseInterceptor;
 import org.wso2.msf4j.internal.DataHolder;
-import org.wso2.carbon.transport.http.netty.internal.HTTPTransportContextHolder;
-import org.wso2.carbon.transport.http.netty.listener.HTTPTransportListener;
-import org.wso2.msf4j.internal.DataHolder;
 import org.wso2.msf4j.internal.MSF4JMessageProcessor;
 import org.wso2.msf4j.internal.MicroservicesRegistryImpl;
 import org.wso2.msf4j.util.RuntimeAnnotations;
@@ -94,7 +91,7 @@ public class MicroservicesRunner {
      * Deploy a microservice with dynamic path.
      *
      * @param microservice The microservice which is to be deployed
-     * @param basePath The context path for the service
+     * @param basePath     The context path for the service
      * @return this MicroservicesRunner object
      */
     public MicroservicesRunner deploy(String basePath, Object microservice) {
@@ -171,8 +168,8 @@ public class MicroservicesRunner {
      * @param ports The port on which the microservices are exposed
      */
     protected void configureTransport(int... ports) {
-        NettyTransportContextHolder nettyTransportContextHolder = NettyTransportContextHolder.getInstance();
-        nettyTransportContextHolder.setHandlerExecutor(new HandlerExecutor());
+        HTTPTransportContextHolder httpTransportContextHolder = HTTPTransportContextHolder.getInstance();
+        httpTransportContextHolder.setHandlerExecutor(new HandlerExecutor());
 
         Set<TransportProperty> transportProperties = new HashSet<>();
         TransportProperty transportProperty = new TransportProperty();
