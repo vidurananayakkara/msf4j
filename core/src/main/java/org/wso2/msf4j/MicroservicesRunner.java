@@ -26,6 +26,11 @@ import org.wso2.carbon.transport.http.netty.config.TransportsConfiguration;
 import org.wso2.carbon.transport.http.netty.config.YAMLTransportConfigurationBuilder;
 import org.wso2.carbon.transport.http.netty.internal.HTTPTransportContextHolder;
 import org.wso2.carbon.transport.http.netty.listener.HTTPTransportListener;
+import org.wso2.msf4j.interceptor.RequestInterceptor;
+import org.wso2.msf4j.interceptor.ResponseInterceptor;
+import org.wso2.msf4j.internal.DataHolder;
+import org.wso2.carbon.transport.http.netty.internal.HTTPTransportContextHolder;
+import org.wso2.carbon.transport.http.netty.listener.HTTPTransportListener;
 import org.wso2.msf4j.internal.DataHolder;
 import org.wso2.msf4j.internal.MSF4JMessageProcessor;
 import org.wso2.msf4j.internal.MicroservicesRegistryImpl;
@@ -112,15 +117,39 @@ public class MicroservicesRunner {
     }
 
     /**
-     * Add an interceptor which will get called before &amp; after the deployed microservices are invoked. Multiple
-     * interceptors can be added.
+     * Register request interceptors.
      *
-     * @param interceptor The interceptor to be added.
+     * @param requestInterceptor interceptor instances
+     */
+    public MicroservicesRunner addGlobalRequestInterceptor(RequestInterceptor... requestInterceptor) {
+        checkState();
+        msRegistry.addGlobalRequestInterceptor(requestInterceptor);
+        return this;
+    }
+
+    /**
+     * Register response interceptors.
+     *
+     * @param responseInterceptor interceptor instances
+     */
+    public MicroservicesRunner addGlobalResponseInterceptor(ResponseInterceptor... responseInterceptor) {
+        checkState();
+        msRegistry.addGlobalResponseInterceptor(responseInterceptor);
+        return this;
+    }
+
+    /**
+     * Add an interceptor which will get called before &amp; after the deployed microservices are invoked.
+     * Multiple interceptors can be added
+     *
+     * @param interceptor interceptor The interceptor to be added.
      * @return this MicroservicesRunner object
+     * @deprecated
      */
     public MicroservicesRunner addInterceptor(Interceptor... interceptor) {
         checkState();
-        msRegistry.addInterceptor(interceptor);
+        msRegistry.addGlobalRequestInterceptor(interceptor);
+        msRegistry.addGlobalResponseInterceptor(interceptor);
         return this;
     }
 
@@ -142,8 +171,8 @@ public class MicroservicesRunner {
      * @param ports The port on which the microservices are exposed
      */
     protected void configureTransport(int... ports) {
-        HTTPTransportContextHolder httpTransportContextHolder = HTTPTransportContextHolder.getInstance();
-        httpTransportContextHolder.setHandlerExecutor(new HandlerExecutor());
+        NettyTransportContextHolder nettyTransportContextHolder = NettyTransportContextHolder.getInstance();
+        nettyTransportContextHolder.setHandlerExecutor(new HandlerExecutor());
 
         Set<TransportProperty> transportProperties = new HashSet<>();
         TransportProperty transportProperty = new TransportProperty();
